@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.venv/
+.wrangler/
+.auth/
+.env*
+!.env.example
+__pycache__/
+.pytest_cache/
+*.pyc
+artifacts/
+.dev.vars*
+target/
+# Deployment-specific settings and private verification records
+/config/sensors.toml
+/config/*.env
+!/config/empty.env
+!/config/home-sensors.env.example
+/wrangler.jsonc
+/docs/local/
+.DS_Store
+._*
+*.pem
+*.key

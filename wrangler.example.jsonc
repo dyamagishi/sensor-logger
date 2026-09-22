@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "home-sensors",
+  "main": "cloud/worker.ts",
+  "compatibility_date": "2026-09-20",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "home-sensors",
+      "database_id": "YOUR_D1_DATABASE_ID",
+      "migrations_dir": "cloud/migrations"
+    }
+  ],
+  "triggers": { "crons": ["17 3 * * *"] },
+  "vars": { "SENSOR_IDS": "outdoor-meter,co2-meter" },
+  "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID"
+}

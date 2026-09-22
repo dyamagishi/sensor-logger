@@ -1,0 +1,14 @@
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const args = process.argv.slice(2);
+const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(CLOUDFLARE_|CF_|WRANGLER_)/.test(key)));
+env.WRANGLER_SEND_METRICS = 'false';
+const config = JSON.parse(readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
+if (!args.length || args.some(x => ['--profile','--config','-c','--cwd','--env-file'].includes(x.split('=')[0]))) throw Error('このラッパーではプロファイル・作業場所の上書きはできません。');
+if (!['auth','whoami'].includes(args[0]) && !/^[a-f0-9]{32}$/.test(config.account_id ?? '')) throw Error('wrangler.jsonc のaccount_idが未設定です。');
+if (args[0] === 'auth' && !['list'].includes(args[1]) && args[2] !== 'home-sensors') throw Error('このラッパーはhome-sensorsプロファイル専用です。');
+const extra = ['auth','whoami'].includes(args[0]) ? [] : ['--profile','home-sensors'];
+const result = spawnSync(`${root}node_modules/.bin/wrangler`, [...args, ...extra, '--env-file', `${root}${args[0] === 'dev' ? '.dev.vars' : 'config/empty.env'}`], { cwd: root, env, stdio: 'inherit' });
+process.exit(result.status ?? 1);

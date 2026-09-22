@@ -1,0 +1,13 @@
+{
+  "name": "home-sensors",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "cf": "node scripts/cloudflare.mjs",
+    "test:cloud": "node --experimental-strip-types --test tests/cloud.test.ts"
+  },
+  "dependencies": { "uplot": "1.6.32" },
+  "devDependencies": { "vite": "8.3.0", "wrangler": "4.135.0", "typescript": "7.0.2" }
+}

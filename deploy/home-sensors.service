@@ -1,0 +1,37 @@
+[Unit]
+Description=Home BLE environment sensors
+After=bluetooth.service network.target time-sync.target
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+User=home-sensors
+Group=home-sensors
+WorkingDirectory=/opt/home-sensors
+EnvironmentFile=/etc/home-sensors.env
+Environment=XDG_CACHE_HOME=/run/home-sensors/cache
+Environment=SENSOR_LOG_FILE=/run/home-sensors/service.log
+Environment=SENSOR_REGISTRY_FILE=/var/lib/home-sensors/sensors.json
+# BlueZ 5.53: 前回の探索状態が残るため、専用BLE機の起動時に初期化する。
+ExecStartPre=+/bin/systemctl restart bluetooth.service
+ExecStart=/opt/home-sensors/home-sensors --config /opt/home-sensors/config/sensors.toml --dist /opt/home-sensors/dist
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=home-sensors
+RuntimeDirectoryMode=0750
+StateDirectory=home-sensors
+StateDirectoryMode=0700
+StandardOutput=null
+StandardError=null
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/run/home-sensors
+UMask=0077
+MemoryMax=160M
+
+[Install]
+WantedBy=multi-user.target
