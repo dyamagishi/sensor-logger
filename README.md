@@ -90,6 +90,10 @@ ssh nanopi-r5s-b 'tail -40 /tmp/home-sensors/service.log'
 
 ログは `/tmp/home-sensors/` で512 KiB×2世代にローテーションします。GUI追加設定は `/etc/home-sensors/sensors.json` に原子的に保存し、計測記録はRAMに保持します。起動はOpenWrtのprocd（`/etc/init.d/home-sensors`）で行い、BLEアダプタ（hci0）はアプリが直接初期化するためBlueZは不要です。
 
+## HTTP API
+
+本体は LAN-B 内限定のHTTP API（`http://192.168.53.1:8080`）を提供します。認証はなく、書き込み（POST）は専用ヘッダーが必要です。詳細な仕様と `curl` 例は [docs/api.md](docs/api.md) を参照してください。
+
 ## 長時間監視（任意）
 
 `scripts/monitor.py` はMacから1分ごとにステータスを確認し、`artifacts/monitor.jsonl` へ記録する補助ツールです。収集サービスの動作には不要です。
