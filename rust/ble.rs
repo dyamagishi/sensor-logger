@@ -257,6 +257,13 @@ mod linux {
                     return Err(std::io::Error::last_os_error().into());
                 }
             }
+            const HCIDEVUP: libc::c_int = 0x400448c9;
+            if unsafe { libc::ioctl(fd.as_raw_fd(), HCIDEVUP, adapter as libc::c_int) } < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::EALREADY) {
+                    return Err(error.into());
+                }
+            }
             Ok(Self(AsyncFd::new(fd)?))
         }
         async fn recv(&self) -> Result<Vec<u8>> {

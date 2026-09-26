@@ -1,6 +1,6 @@
 # おうちの空気 / Sensor Logger
 
-NanoPi NEO2でSwitchBotのBLE広告を受信し、温度・湿度・CO₂をブラウザで表示するサービスです。収集・Web APIはRust、画面はTypeScript、クラウド保存はCloudflare Workers + D1を使います。
+NanoPi R5S (OpenWrt) でSwitchBotのBLE広告を受信し、温度・湿度・CO₂をブラウザで表示するサービスです。収集・Web APIはRust、画面はTypeScript、クラウド保存はCloudflare Workers + D1を使います。
 
 ## 特徴
 
@@ -78,24 +78,24 @@ npm run cf -- dev --local --port 8787
 
 ## 日常の確認
 
-以下の `nanopi-neo2` は自分のSSH接続先に置き換えてください。
+以下の `nanopi-r5s-b` は自分のSSH接続先に置き換えてください（NanoPi R5S の LAN-B 側、`192.168.53.1`）。
 
 ```sh
-ssh nanopi-neo2 'systemctl status home-sensors --no-pager'
-ssh nanopi-neo2 'curl -fsS http://localhost:8080/api/status'
-ssh nanopi-neo2 'sudo tail -40 /run/home-sensors/service.log'
+ssh nanopi-r5s-b '/etc/init.d/home-sensors status'
+ssh nanopi-r5s-b 'wget -qO- http://192.168.53.1:8080/api/status'
+ssh nanopi-r5s-b 'tail -40 /tmp/home-sensors/service.log'
 ```
 
 両センサーの `events` と `observed_at` が増えることを確認します。`collector.state=scanning` だけでは受信の証拠になりません。`cloud.pending` は送信待ち件数、`dropped` は24時間の期限切れ件数です。
 
-ログは `/run/home-sensors/` で512 KiB×2世代にローテーションします。GUI追加設定は `/var/lib/home-sensors/sensors.json` に原子的に保存し、計測記録はRAMに保持します。OSのログ・swap設定は別途管理してください。
+ログは `/tmp/home-sensors/` で512 KiB×2世代にローテーションします。GUI追加設定は `/etc/home-sensors/sensors.json` に原子的に保存し、計測記録はRAMに保持します。起動はOpenWrtのprocd（`/etc/init.d/home-sensors`）で行い、BLEアダプタ（hci0）はアプリが直接初期化するためBlueZは不要です。
 
 ## 長時間監視（任意）
 
 `scripts/monitor.py` はMacから1分ごとにステータスを確認し、`artifacts/monitor.jsonl` へ記録する補助ツールです。収集サービスの動作には不要です。
 
 ```sh
-uv run --no-project --python 3.12 python scripts/monitor.py --url http://nanopi.local:8080 --hours 24
+uv run --no-project --python 3.12 python scripts/monitor.py --url http://192.168.53.1:8080 --hours 24
 ```
 
 URLは自分の機器に変更してください。Macのスリープ・ネットワーク切断で監視は途切れますが、本体の収集は独立して動作します。

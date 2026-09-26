@@ -1,0 +1,16 @@
+#!/bin/sh /etc/rc.common
+
+START=95
+STOP=10
+USE_PROCD=1
+
+start_service() {
+	mkdir -p /tmp/home-sensors
+	modprobe btusb 2>/dev/null
+	procd_open_instance
+	procd_set_param command /bin/sh -c "set -a; . /etc/home-sensors.env 2>/dev/null; SENSOR_LOG_FILE=/tmp/home-sensors/service.log; SENSOR_REGISTRY_FILE=/etc/home-sensors/sensors.json; exec /opt/home-sensors/home-sensors --config /opt/home-sensors/config/sensors.toml --dist /opt/home-sensors/dist"
+	procd_set_param respawn 3600 5 5
+	procd_set_param stdout 0
+	procd_set_param stderr 0
+	procd_close_instance
+}
