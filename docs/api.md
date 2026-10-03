@@ -171,3 +171,54 @@ curl -s http://192.168.53.1:8080/api/discovery | jq '.devices[] | {address, name
 ```
 
 > 本体へは `192.168.53.1` で到達します。SSH側の `localhost` では待受していない点に注意してください。
+
+## Hue照明API
+
+セットアップは[Hueの管理者CLI](hue.md)を使います。Hueの認証情報は応答に含めません。`/api/status`の`hue`に接続状態・最終取得時刻・登録デバイスを追加し、`cloud.pending`と`dropped`はセンサーと照明の合計になります。
+
+### `GET /api/hue/devices`
+
+定期取得した個々のデバイス一覧を返します。GETでBridgeへの追加取得は行いません。
+
+- `state`: `unconfigured` / `connecting` / `online` / `offline`
+- `devices`: Bridge上の候補。`id`, `name`, `selected`, `present`, `outputs[]`
+- `archive`: 過去に登録し、現在選択していないデバイス
+- `outputs[]`: 出力ID・名前・対応項目（`dimming`, `color`, `temperature`のmirek範囲）、`values`、`available`, `connectivity`, `observed_at`
+- `values`: `on`, `brightness`, `mirek`, `x`, `y`, `color_mode`。非対応・無効な値は`null`。取得不可時の現在値は最後の確認値で、履歴の欠測とは区別します。
+
+### `POST /api/hue/devices`
+
+```json
+{"device_id":"hue-00000000000000000000000000000001","selected":true}
+```
+
+選択を原子的に保存します。解除は`selected:false`。過去履歴は削除しません。選択中は最大128デバイス、登録出力はアーカイブを含め最大512。成功は`200 {"ok":true}`、保存失敗は`503`です。
+
+### `POST /api/hue/control`
+
+```json
+{"light_id":"hue-00000000000000000000000000000002","brightness":60}
+```
+
+操作は次の任意項目を指定します。出力IDは一覧から取得します。
+
+| 項目 | 指定 |
+|---|---|
+| `on` | boolean、点灯・消灯 |
+| `brightness` | 0〜100%、対応機器のみ。0は消灯ではない |
+| `mirek` | 機器の色温度範囲内の整数。Kelvin = 1,000,000 / mirek |
+| `xy` | CIE xyの`[x,y]`。機器の色域が取得できれば範囲内へ補正 |
+
+明るさ・色温度・色の変更は点灯も指示します。色温度と色の同時指定、消灯と調整の同時指定、非対応項目・不正値は`400`です。登録外出力は`404`、確認・操作中は`409`、状態取得不可は`503`、操作または再取得失敗は`502`。成功は再取得した`hue`状態を返します。操作後の取得は履歴へ追加しません。
+
+### `GET /api/hue/history?light_id=…&days=1`
+
+`days`は`1`/`7`/`30`/`365`、省略時は1。解除した照明も参照できます。`samples`, `bucket_seconds`, `from`, `to`, `source`, `cloud_error`を返します。
+
+- 分記録：`minute`, `observed_at`, `available`, `connectivity`, `on`, `brightness`, `mirek`, `x`, `y`, `color_mode`。取得不可なら状態値は`null`。
+- 時間集計：`minute`, `on_fraction`（0〜1）, `brightness`, `brightness_min`, `brightness_max`, `mirek`, `x`, `y`, `available_count`, `unavailable_count`, `sample_count`。
+- クラウド履歴とRAMの記録を併合します。不完全なRAM集計で既存のクラウド時間集計を上書きしません。
+
+### クラウド側
+
+`/api/v1/hue/lights`と`/api/v1/hue/samples`へのPOSTは`INGEST_TOKEN`、`/api/v1/hue/history`へのGETは`READ_TOKEN`を必要とします。センサーと同じ受領確認・最大1,000件分割・同一出力／分の再送重複排除を使います。Hue専用テーブルは`0003_hue.sql`で追加します。

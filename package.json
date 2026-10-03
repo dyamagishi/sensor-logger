@@ -6,7 +6,9 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "cf": "node scripts/cloudflare.mjs",
-    "test:cloud": "node --experimental-strip-types --test tests/cloud.test.ts"
+    "test:cloud": "node --experimental-strip-types --test tests/cloud.test.ts tests/hue-cloud.test.ts",
+    "hue:setup": "node scripts/hue-setup.mjs",
+    "test:hue": "node --experimental-strip-types --test tests/hue-setup.test.mjs tests/hue-color.test.ts"
   },
   "dependencies": { "uplot": "1.6.32" },
   "devDependencies": { "vite": "8.3.0", "wrangler": "4.135.0", "typescript": "7.0.2" }

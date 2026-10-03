@@ -22,3 +22,6 @@ target/
 ._*
 *.pem
 *.key
+/config/hue.toml
+/config/hue-certificate.der
+hue.env

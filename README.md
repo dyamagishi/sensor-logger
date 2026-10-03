@@ -12,6 +12,7 @@ NanoPi R5S (OpenWrt) でSwitchBotのBLE広告を受信し、温度・湿度・CO
 - GUIからセンサーを探索・登録。追加設定だけを永続化し、最大32台まで扱えます。
 - ブラウザは本体へアクセスし、クラウド用トークンは受け取りません。
 - 電池20%以下を注意、10%以下を交換の目安として表示します。
+- Philips Hueの個々の照明を選択・操作し、1分ごとの点灯状態・明るさ・色を記録。設定生成用の管理者CLIを備えます。[Hueのセットアップと仕様](docs/hue.md)。
 
 本体Web画面は信頼できるLAN内での利用を想定し、ログイン認証はありません。再起動・電源断ではRAM上の未送信分が失われます。
 
@@ -25,6 +26,7 @@ cp config/sensors.example.toml config/sensors.toml
 cp wrangler.example.jsonc wrangler.jsonc
 cargo test --locked
 npm run test:cloud
+npm run test:hue
 npx tsc --noEmit
 npm run build
 ```

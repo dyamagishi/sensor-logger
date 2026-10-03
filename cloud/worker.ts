@@ -1,4 +1,5 @@
 import { validateSample, aggregateSQL, insertBatchSQL, type Sample } from './model';
+import { hueRequest } from './hue';
 type Secrets = { INGEST_TOKEN: string; READ_TOKEN: string };
 const DAY = 86400;
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -37,8 +38,10 @@ export default {
     if (url.pathname === '/health' && request.method === 'GET') return json({ ok: true, service: 'home-sensors' });
     const write = url.pathname === '/api/v1/samples' && request.method === 'POST';
     const register = url.pathname === '/api/v1/sensors' && request.method === 'POST';
-    if (!await authorized(request, write || register ? env.INGEST_TOKEN : env.READ_TOKEN)) return json({ error: 'unauthorized' }, 401);
+    const hueWrite = ['/api/v1/hue/lights','/api/v1/hue/samples'].includes(url.pathname) && request.method==='POST';
+    if (!await authorized(request, write || register || hueWrite ? env.INGEST_TOKEN : env.READ_TOKEN)) return json({ error: 'unauthorized' }, 401);
     const now = Math.floor(Date.now()/1000);
+    if(url.pathname.startsWith('/api/v1/hue/'))return hueRequest(request,env.DB,()=>readBody(request),now);
     if (register) {
       let requested: string[];
       try {
@@ -90,7 +93,9 @@ export default {
     // 削除も分割し、長期停止後でも1回のCron処理量を制限する。
     await env.DB.batch([
       env.DB.prepare(`DELETE FROM samples WHERE (sensor_id,minute) IN (SELECT sensor_id,minute FROM samples WHERE minute<? LIMIT 50000)`).bind(now-90*DAY),
-      env.DB.prepare(`DELETE FROM hourly WHERE (sensor_id,hour) IN (SELECT sensor_id,hour FROM hourly WHERE hour<? LIMIT 10000)`).bind(now-5*365*DAY)
+      env.DB.prepare(`DELETE FROM hourly WHERE (sensor_id,hour) IN (SELECT sensor_id,hour FROM hourly WHERE hour<? LIMIT 10000)`).bind(now-5*365*DAY),
+      env.DB.prepare(`DELETE FROM hue_samples WHERE (light_id,minute) IN (SELECT light_id,minute FROM hue_samples WHERE minute<? LIMIT 50000)`).bind(now-90*DAY),
+      env.DB.prepare(`DELETE FROM hue_hourly WHERE (light_id,hour) IN (SELECT light_id,hour FROM hue_hourly WHERE hour<? LIMIT 10000)`).bind(now-5*365*DAY)
     ]);
   }
 };

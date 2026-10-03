@@ -2,16 +2,18 @@ import './style.css';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { setupRegistration } from './registration';
+import { setupHue, type HueStatus } from './hue';
 
 type Metric = 'temperature'|'humidity'|'co2';
 type Sensor = { id:string; name:string; kind:string; observed_at?:number; temperature?:number|null; humidity?:number|null; co2?:number|null; battery?:number|null; rssi?:number|null; stale:boolean; events:number };
 type Row = { minute:number; temperature:number|null; humidity:number|null; co2:number|null };
 type History = { samples:Row[]; source:string; cloud_error?:string; bucket_seconds:number; from:number; to:number };
-type Status = { now:number; sensors:Sensor[]; collector:{state:string;error?:string}; cloud:{state:string;pending:number;dropped:number;last_sent?:number;next_send_at?:number} };
+type Status = { now:number; sensors:Sensor[]; hue?:HueStatus; collector:{state:string;error?:string}; cloud:{state:string;pending:number;dropped:number;last_sent?:number;next_send_at?:number} };
 const icon = `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 16 16 6l11 10M9 14v12h14V14M13 26v-8h6v8"/></svg>`;
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `<main class="dashboard"><header><div class="brand"><div class="brand-mark">${icon}</div><div><p class="eyebrow">HOME / ENVIRONMENT</p><h1>おうちの空気<span>いつもの場所を、ひと目で。</span></h1></div></div><div class="clock"><time id="clock">--:--</time><span id="date"></span></div></header><div class="section-label"><span><i class="live-dot"></i>いまのようす</span><span id="summary">センサーを確認しています</span></div><div class="graph-options" role="group" aria-label="表示するグラフ"><span>24時間グラフ</span><label><input type="checkbox" data-show="temperature" checked>温度</label><label><input type="checkbox" data-show="humidity" checked>湿度</label><label><input type="checkbox" data-show="co2" checked>CO₂</label><span class="selection-hint">複数選択可</span></div><div id="battery-alerts"></div><section id="sensors" class="sensor-grid" aria-label="センサー一覧"><div class="empty">センサーに接続しています…</div></section><footer><div id="connection">接続を確認しています</div><div class="footer-actions"><span id="refresh"></span><button id="fullscreen" aria-label="全画面表示">⛶ <span>全画面</span></button></div></footer></main><dialog id="detail"><div class="detail-head"><div><p class="eyebrow">HISTORY / 記録</p><h2 id="detail-name"></h2></div><button id="close" aria-label="閉じる">✕</button></div><div class="detail-controls"><div id="periods" class="segmented"><button data-days="1" class="active">24時間</button><button data-days="7">7日</button><button data-days="30">30日</button><button data-days="365">1年</button></div><div id="metrics" class="graph-options detail-options" role="group" aria-label="履歴に表示するグラフ"><label><input type="checkbox" data-detail-metric="temperature">温度</label><label><input type="checkbox" data-detail-metric="humidity">湿度</label><label><input type="checkbox" data-detail-metric="co2">CO₂</label></div></div><div id="plot"></div><p id="history-message"></p></dialog>`;
 const cards = document.querySelector<HTMLDivElement>('#sensors')!;
+const hue=setupHue();
 const histories = new Map<string,History>();
 const allMetrics:Metric[]=['temperature','humidity','co2'];
 let visibleMetrics=new Set<Metric>(allMetrics);
@@ -101,9 +103,10 @@ async function poll() {
     const response=await fetch('/api/status',{signal:AbortSignal.timeout(4000)});
     if(!response.ok)throw Error();
     const first=!status;
-    status=await response.json();lastOk=Date.now();render();
+    status=await response.json();lastOk=Date.now();render();hue.update(status?.hue);
     if(first)void updateHistories();
   } catch {
+    hue.disconnected();
     document.querySelector('#connection')!.textContent='NanoPiに接続できません。表示は最終受信時の値です。';
     cards.classList.add('disconnected');
     document.querySelector('#refresh')!.textContent=lastOk?`最終接続 ${age(lastOk/1000)}`:'再接続待ち';

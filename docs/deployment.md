@@ -71,6 +71,8 @@ ssh nanopi-r5s-b 'uci add firewall rule; uci set firewall.@rule[-1].name=Reject-
 
 ## 更新
 
+Hueを追加する場合は、[Hueの設定生成・反映手順](hue.md)も実施します。クラウドのマイグレーションとWorker更新を先に行います。
+
 再起動でRAM上の未送信記録が失われるため、`/api/status` の `cloud.pending` が0になった直後に更新します。
 
 1. Macでテストとビルドを実行します。

@@ -1,5 +1,6 @@
 mod ble;
 mod cloud;
+mod hue;
 mod registry;
 mod store;
 #[cfg(test)]
@@ -60,6 +61,7 @@ struct Config {
     retention_hours: i64,
     upload_seconds: i64,
     registry_file: Option<PathBuf>,
+    hue: Option<hue::Config>,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -72,10 +74,12 @@ impl Default for Config {
             retention_hours: 24,
             upload_seconds: 3600,
             registry_file: None,
+            hue: None,
         }
     }
 }
 pub struct Service {
+    hue: hue::Hue,
     store: Store,
     scanner: ble::Scanner,
     registry: Vec<Sensor>,
@@ -129,6 +133,7 @@ impl Service {
             .trim_end_matches('/')
             .to_string();
         Ok(Self {
+            hue: hue::Hue::new(config.hue)?,
             store: Store::new(config.sensors, config.retention_hours * 3600),
             scanner: ble::Scanner::disabled(),
             registry,
@@ -192,7 +197,7 @@ async fn status(State(shared): State<Shared>) -> Json<Value> {
     let s = shared.lock().await;
     let time = now();
     Json(
-        json!({"now":time,"uptime_seconds":time-s.started,"sensors":s.store.status(time),"collector":{"state":s.scanner.state,"error":s.scanner.error,"last_event":s.scanner.last_event},"cloud":{"state":s.cloud_state,"error":s.cloud_error,"last_sent":s.last_sent,"pending":s.store.pending.len(),"dropped":s.store.dropped,"next_send_at":s.next_send_at,"upload_seconds":s.send_interval,"upload_requests":s.upload_requests},"history_points":s.store.history.len()}),
+        json!({"now":time,"uptime_seconds":time-s.started,"sensors":s.store.status(time),"hue":s.hue.status(time),"collector":{"state":s.scanner.state,"error":s.scanner.error,"last_event":s.scanner.last_event},"cloud":{"state":s.cloud_state,"error":s.cloud_error,"last_sent":s.last_sent,"pending":s.store.pending.len()+s.hue.pending.len(),"dropped":s.store.dropped+s.hue.dropped,"next_send_at":s.next_send_at,"upload_seconds":s.send_interval,"upload_requests":s.upload_requests},"history_points":s.store.history.len()}),
     )
 }
 async fn discovery(State(shared): State<Shared>) -> Response {
@@ -279,6 +284,9 @@ fn app(shared: Shared, dist: PathBuf) -> Router {
         .route("/api/history", get(cloud::history))
         .route("/api/discovery", get(discovery).post(start_discovery))
         .route("/api/sensors", post(register))
+        .route("/api/hue/devices", get(hue::devices).post(hue::select))
+        .route("/api/hue/control", post(hue::control))
+        .route("/api/hue/history", get(hue::history))
         .route_service(
             "/",
             tower_http::services::ServeFile::new(dist.join("index.html")),
@@ -338,6 +346,7 @@ async fn run() -> Result<()> {
         .parse()?;
     let bind = format!("{}:{}", config.host, config.port);
     let shared = Arc::new(Mutex::new(Service::new(config)?));
+    tokio::spawn(hue::run(shared.clone()));
     if !no_ble {
         tokio::spawn(ble::run(shared.clone(), adapter));
     }

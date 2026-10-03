@@ -50,6 +50,7 @@ pub async fn send_due(shared: &Shared, time: i64) -> bool {
                 .collect::<Vec<_>>(),
         )
     };
+    let mut hue_sent = false;
     let result: Result<()> = async {
         if !registrations.is_empty() {
             let receipt = response(
@@ -101,6 +102,7 @@ pub async fn send_due(shared: &Shared, time: i64) -> bool {
             s.cloud_state = "online".into();
             s.cloud_error = None;
         }
+        hue_sent = crate::hue::upload(shared, &http, &cloud, &token).await?;
         Ok(())
     }
     .await;
@@ -111,7 +113,7 @@ pub async fn send_due(shared: &Shared, time: i64) -> bool {
         crate::log_error(&format!("cloud upload: {}", safe_error(&e)));
         return false;
     }
-    !snapshot.is_empty()
+    !snapshot.is_empty() || hue_sent
 }
 fn safe_error(e: &anyhow::Error) -> String {
     // reqwest errors may carry URLs; tokens and request details never go to clients.
