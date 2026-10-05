@@ -231,6 +231,8 @@ document.querySelector('#close')!.addEventListener('click',()=>dialog.close());
 dialog.addEventListener('close',()=>{historySequence++;plots.forEach(p=>p.destroy());plots=[];});
 document.querySelectorAll<HTMLButtonElement>('[data-days]').forEach(b=>b.onclick=()=>{activeDays=Number(b.dataset.days);void drawDetail();});
 document.querySelectorAll<HTMLInputElement>('[data-detail-metric]').forEach(b=>b.onchange=()=>{const m=b.dataset.detailMetric as Metric;if(b.checked)detailMetrics.add(m);else detailMetrics.delete(m);try{localStorage.setItem('home-sensors.detail.'+activeSensor,JSON.stringify([...detailMetrics]));}catch{}void drawDetail();});
+const standalone=window.matchMedia('(display-mode: standalone)').matches||(navigator as Navigator&{standalone?:boolean}).standalone===true;
+if(standalone)document.querySelector<HTMLButtonElement>('#fullscreen')!.hidden=true;
 document.querySelector('#fullscreen')!.addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{document.querySelector('#refresh')!.textContent='ブラウザの全画面機能をご利用ください';}});
 window.addEventListener('resize',()=>{plots.forEach(plot=>plot.setSize({width:document.querySelector<HTMLElement>('#plot')!.clientWidth,height:detailMetrics.size>1?200:Math.min(340,innerHeight*0.43)}));});
 const rotation=new AmbientRotation();

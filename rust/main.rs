@@ -298,6 +298,7 @@ fn app(shared: Shared, dist: PathBuf) -> Router {
             "/assets",
             tower_http::services::ServeDir::new(dist.join("assets")),
         )
+        .fallback_service(tower_http::services::ServeDir::new(&dist))
         .layer(DefaultBodyLimit::max(32768))
         .layer(middleware::from_fn(headers))
         .with_state(shared)
