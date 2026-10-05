@@ -30,10 +30,11 @@ function spark(hist:History|undefined) {
   for(const r of hist.samples){const n=point(r,'brightness',false);if(n==null){prev=undefined;continue;}path+=`${prev==null||r.minute-prev>90?'M':'L'}${((r.minute-hist.from)/(hist.to-hist.from)*392+4).toFixed(2)},${(55-n*0.45).toFixed(2)} `;prev=r.minute;}
   return `<svg class="spark" viewBox="0 0 400 66" preserveAspectRatio="none" aria-label="点灯中の明るさ 0〜100%"><path class="baseline" d="M4 60H396"/><path d="${path}" style="stroke:#e4b886"/></svg><div class="hue-axis"><span>${timestamp(hist.from).split(' ')[1]??'24時間前'}</span><span>現在</span></div>`;
 }
-export function setupHue() {
+export function setupHue(container?:HTMLElement) {
   const section=document.createElement('section');section.className='hue-section';section.setAttribute('aria-label','Hue照明');
   section.innerHTML=`<div class="section-label"><span>照明 / HUE</span><div class="hue-actions"><button class="add-sensor" data-manage>照明を選択</button><button class="add-sensor" data-archive>過去の履歴</button></div></div><p class="hue-message" role="status"></p><div class="hue-grid"></div>`;
-  document.querySelector('footer')!.parentElement!.insertBefore(section,document.querySelector('footer'));
+  if(container)container.appendChild(section);
+  else document.querySelector('footer')!.parentElement!.insertBefore(section,document.querySelector('footer'));
   const grid=section.querySelector<HTMLDivElement>('.hue-grid')!;
   const manage=document.createElement('dialog');manage.className='hue-dialog';manage.innerHTML=`<div class="detail-head"><h2>照明を選択</h2><button data-close aria-label="閉じる">✕</button></div><p class="registration-intro">個々のデバイスを選択します。名前はHue側に追従します。登録解除後も過去の履歴は保存期限まで残ります。</p><div data-list></div><p data-message role="status"></p>`;document.body.appendChild(manage);
   const detail=document.createElement('dialog');detail.className='hue-dialog';detail.innerHTML=`<div class="detail-head"><h2 data-name></h2><button data-close aria-label="閉じる">✕</button></div><div class="segmented" data-periods>${[[1,'24時間'],[7,'7日'],[30,'30日'],[365,'1年']].map(([n,s])=>`<button data-hue-days="${n}">${s}</button>`).join('')}</div><div data-charts></div><div data-color class="hue-color-readout"></div><p data-message role="status"></p>`;document.body.appendChild(detail);

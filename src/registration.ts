@@ -1,9 +1,9 @@
 type Device = { address:string; name:string; kind:string; registered:boolean; registered_name?:string; temperature:number|null; humidity:number|null; co2:number|null; battery:number|null; rssi:number|null; observed_at:number };
 type Discovery = { devices:Device[]; scanning:boolean; until:number; collector_state:string };
 
-export function setupRegistration(onAdded:()=>Promise<void>) {
+export function setupRegistration(onAdded:()=>Promise<void>, container?:HTMLElement) {
   const button=document.createElement('button');button.id='add-sensor';button.className='add-sensor';button.textContent='＋ センサーを追加';
-  document.querySelector('.graph-options')!.appendChild(button);
+  (container??document.querySelector('.graph-options')!).appendChild(button);
   const dialog=document.createElement('dialog');dialog.id='registration';dialog.setAttribute('aria-labelledby','registration-title');
   dialog.innerHTML=`<div class="detail-head"><div><p class="eyebrow">DEVICES / センサー</p><h2 id="registration-title">センサーを追加</h2></div><button type="button" id="registration-close" aria-label="追加画面を閉じる">✕</button></div>
   <p class="registration-intro">追加したいSwitchBotに電池を入れて、NanoPiの近くに置いてください。温湿度・CO₂を受信できる機器が表示されます。</p>

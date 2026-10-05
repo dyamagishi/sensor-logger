@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
+    "test:ambient": "node --experimental-strip-types --test tests/ambient.test.ts",
     "cf": "node scripts/cloudflare.mjs",
     "test:cloud": "node --experimental-strip-types --test tests/cloud.test.ts tests/hue-cloud.test.ts",
     "hue:setup": "node scripts/hue-setup.mjs",
