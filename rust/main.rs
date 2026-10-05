@@ -33,6 +33,9 @@ pub fn now() -> i64 {
         .as_secs() as i64
 }
 fn log_error(message: &str) {
+    log_message("ERROR", message);
+}
+fn log_message(level: &str, message: &str) {
     use std::io::Write;
     if let Some(path) = std::env::var_os("SENSOR_LOG_FILE").map(PathBuf::from) {
         if std::fs::metadata(&path).is_ok_and(|m| m.len() >= 524288) {
@@ -43,10 +46,10 @@ fn log_error(message: &str) {
             .append(true)
             .open(path)
         {
-            let _ = writeln!(file, "{} ERROR {message}", now());
+            let _ = writeln!(file, "{} {level} {message}", now());
         }
     } else {
-        eprintln!("{} ERROR {message}", now());
+        eprintln!("{} {level} {message}", now());
     }
 }
 pub type Shared = Arc<Mutex<Service>>;
@@ -356,6 +359,18 @@ async fn run() -> Result<()> {
         loop {
             tokio::time::sleep(Duration::from_millis(200)).await;
             let time = now();
+            {
+                let mut s = sample.lock().await;
+                let Service {
+                    scanner,
+                    store,
+                    started,
+                    ..
+                } = &mut *s;
+                for message in scanner.diagnostic_logs(store, time, *started) {
+                    log_message("INFO", &message);
+                }
+            }
             let next = time / 60 * 60;
             if next > minute {
                 sample.lock().await.store.finalize(minute, time);

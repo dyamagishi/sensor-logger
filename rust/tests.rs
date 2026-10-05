@@ -59,6 +59,25 @@ async fn request(app: Router, path: &str, body: Option<Value>, csrf: bool) -> (S
     (code, serde_json::from_slice(&bytes).unwrap())
 }
 #[tokio::test]
+async fn ble_diagnostics_count_reports_without_changing_collection() {
+    let shared = service();
+    let started = now();
+    {
+        let mut s = shared.lock().await;
+        s.store.sensors[0].address = "02:11:22:33:44:55".into();
+        s.scanner.state = "scanning".into();
+    }
+    ble::consume(&shared, &packet()).await;
+    let mut s = shared.lock().await;
+    assert_eq!(s.store.events["a"], 1);
+    let Service { scanner, store, .. } = &mut *s;
+    let logs = scanner.diagnostic_logs(store, started + 300, started);
+    assert_eq!(logs.len(), 1);
+    assert!(logs[0].contains("received=2 accepted=1"));
+    assert!(logs[0].contains("no_manufacturer_in_report\": 1"));
+}
+
+#[tokio::test]
 async fn discovery_registration_persistence_and_csrf() {
     let s = service();
     let tmp = tempfile::tempdir().unwrap();

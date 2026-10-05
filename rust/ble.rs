@@ -61,29 +61,35 @@ pub fn reports(packet: &[u8]) -> Vec<(String, Advertisement)> {
     }
     out
 }
+#[cfg(test)]
 pub fn decode(adv: &Advertisement) -> Option<Values> {
+    decode_reason(adv).ok()
+}
+fn decode_reason(adv: &Advertisement) -> Result<Values, &'static str> {
     let service = adv
         .service
         .get(&0xfd3d)
-        .or_else(|| adv.service.get(&0x0d00))?;
-    let model = service.first()? & 0x7f;
+        .or_else(|| adv.service.get(&0x0d00))
+        .ok_or("missing_service")?;
+    let model = service.first().ok_or("short_service")? & 0x7f;
     if !matches!(
         model,
         b'w' | b'W' | b'i' | b'I' | b't' | b'T' | b'4' | 0x14 | b'5' | 0x15
     ) {
-        return None;
+        return Err("unsupported_model");
     }
     let manufacturer = adv.manufacturer.get(&2409);
     let temp = manufacturer
         .filter(|m| m.len() >= 11)
         .map(|m| &m[8..11])
-        .or_else(|| service.get(3..6))?;
+        .or_else(|| service.get(3..6))
+        .ok_or("missing_measurements")?;
     let battery = service.get(2).map(|v| (v & 127) as f64);
     let temperature = ((temp[1] & 127) as f64 + (temp[0] & 15) as f64 / 10.)
         * if temp[1] & 128 != 0 { 1. } else { -1. };
     let humidity = (temp[2] & 127) as f64;
     if temperature == 0. && humidity == 0. && battery == Some(0.) {
-        return None;
+        return Err("zero_placeholder");
     }
     let co2 = if matches!(model, b'5' | 0x15) {
         manufacturer
@@ -92,16 +98,30 @@ pub fn decode(adv: &Advertisement) -> Option<Values> {
     } else {
         None
     };
-    Some(
-        Values {
-            temperature: Some(temperature),
-            humidity: Some(humidity),
-            co2,
-            battery,
-            rssi: Some(adv.rssi as f64),
-        }
-        .checked(),
-    )
+    Ok(Values {
+        temperature: Some(temperature),
+        humidity: Some(humidity),
+        co2,
+        battery,
+        rssi: Some(adv.rssi as f64),
+    }
+    .checked())
+}
+#[derive(Default)]
+struct Diagnostics {
+    received: u64,
+    accepted: u64,
+    missing_co2: u64,
+    skipped: std::collections::BTreeMap<&'static str, u64>,
+    last_raw: Option<i64>,
+    rssi: Option<i8>,
+    last_log: Option<i64>,
+    was_stale: bool,
+}
+impl Diagnostics {
+    fn skip(&mut self, reason: &'static str) {
+        *self.skipped.entry(reason).or_default() += 1;
+    }
 }
 #[derive(Default)]
 pub struct Scanner {
@@ -111,8 +131,47 @@ pub struct Scanner {
     pub discovery_until: i64,
     cache: HashMap<String, (Advertisement, i64)>,
     pub candidates: HashMap<String, Value>,
+    diagnostics: HashMap<String, Diagnostics>,
 }
 impl Scanner {
+    pub fn diagnostic_logs(
+        &mut self,
+        store: &crate::store::Store,
+        time: i64,
+        started: i64,
+    ) -> Vec<String> {
+        if self.state == "disabled" {
+            return vec![];
+        }
+        let mut logs = vec![];
+        for sensor in &store.sensors {
+            let d = self.diagnostics.entry(sensor.id.clone()).or_default();
+            if time - d.last_log.unwrap_or(started) < 300 {
+                continue;
+            }
+            let last_valid = store.latest.get(&sensor.id).map(|r| r.observed_at);
+            let stale = time - last_valid.unwrap_or(started) >= 180;
+            let state = if stale {
+                "stale"
+            } else if d.was_stale {
+                "recovered"
+            } else {
+                "receiving"
+            };
+            logs.push(format!(
+                "BLE sensor={} state={} received={} accepted={} missing_co2={} skipped={:?} raw_age_seconds={:?} valid_age_seconds={:?} rssi={:?}",
+                sensor.id, state, d.received, d.accepted, d.missing_co2, d.skipped,
+                d.last_raw.map(|t| time - t), last_valid.map(|t| time - t), d.rssi,
+            ));
+            d.received = 0;
+            d.accepted = 0;
+            d.missing_co2 = 0;
+            d.skipped.clear();
+            d.last_log = Some(time);
+            d.was_stale = stale;
+        }
+        logs
+    }
     pub fn disabled() -> Self {
         Self {
             state: "disabled".into(),
@@ -150,6 +209,12 @@ pub async fn consume(shared: &Shared, packet: &[u8]) {
         if id.is_none() && !discovering {
             continue;
         }
+        if let Some(id) = &id {
+            let d = s.scanner.diagnostics.entry(id.clone()).or_default();
+            d.received += 1;
+            d.last_raw = Some(time);
+            d.rssi = Some(adv.rssi);
+        }
         if !s.scanner.cache.contains_key(&address) && s.scanner.cache.len() >= 256 {
             let oldest = s
                 .scanner
@@ -171,10 +236,27 @@ pub async fn consume(shared: &Shared, packet: &[u8]) {
         entry.0.rssi = adv.rssi;
         entry.1 = time;
         if !has_manufacturer {
+            if let Some(id) = &id {
+                s.scanner
+                    .diagnostics
+                    .get_mut(id)
+                    .unwrap()
+                    .skip("no_manufacturer_in_report");
+            }
             continue;
         }
-        let Some(values) = decode(&entry.0).filter(Values::valid) else {
-            continue;
+        let values = match decode_reason(&entry.0) {
+            Ok(values) if values.valid() => values,
+            result => {
+                if let Some(id) = &id {
+                    s.scanner
+                        .diagnostics
+                        .get_mut(id)
+                        .unwrap()
+                        .skip(result.err().unwrap_or("invalid_measurements"));
+                }
+                continue;
+            }
         };
         if discovering {
             let kind = if values.co2.is_some() { "co2" } else { "meter" };
@@ -183,6 +265,14 @@ pub async fn consume(shared: &Shared, packet: &[u8]) {
             s.scanner.candidates.insert(address, row);
         }
         if let Some(id) = id {
+            let missing_co2 = values.co2.is_none()
+                && s.store
+                    .sensors
+                    .iter()
+                    .any(|sensor| sensor.id == id && sensor.kind == "co2");
+            let d = s.scanner.diagnostics.get_mut(&id).unwrap();
+            d.accepted += 1;
+            d.missing_co2 += u64::from(missing_co2);
             s.store.observe(&id, values, time);
             s.scanner.last_event = Some(time);
         }
@@ -376,6 +466,62 @@ pub async fn run(shared: Shared, _adapter: u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn diagnostics_are_bounded_and_report_stale_recovery() {
+        let mut scanner = Scanner {
+            state: "scanning".into(),
+            ..Default::default()
+        };
+        let mut store = crate::store::Store::new(
+            vec![crate::store::Sensor {
+                id: "a".into(),
+                address: "AA:BB:CC:DD:EE:FF".into(),
+                name: "A".into(),
+                kind: "co2".into(),
+                cloud_synced: None,
+            }],
+            86400,
+        );
+        let d = scanner.diagnostics.entry("a".into()).or_default();
+        d.received = 10000;
+        d.last_raw = Some(1299);
+        for _ in 0..10000 {
+            d.skip("missing_service");
+        }
+        assert!(scanner.diagnostic_logs(&store, 1299, 1000).is_empty());
+        let logs = scanner.diagnostic_logs(&store, 1300, 1000);
+        assert_eq!(logs.len(), 1);
+        assert!(logs[0].contains("state=stale received=10000 accepted=0"));
+        assert!(logs[0].contains("missing_service\": 10000"));
+        assert!(scanner.diagnostic_logs(&store, 1301, 1000).is_empty());
+        store.observe(
+            "a",
+            Values {
+                temperature: Some(20.),
+                ..Default::default()
+            },
+            1599,
+        );
+        let logs = scanner.diagnostic_logs(&store, 1600, 1000);
+        assert!(logs[0].contains("state=recovered received=0 accepted=0"));
+        assert!(logs[0].contains("skipped={}"));
+        scanner.state = "disabled".into();
+        assert!(scanner.diagnostic_logs(&store, 1900, 1000).is_empty());
+    }
+
+    #[test]
+    fn decode_failure_reasons() {
+        let mut adv = Advertisement::default();
+        assert_eq!(decode_reason(&adv).unwrap_err(), "missing_service");
+        adv.service.insert(0xfd3d, vec![]);
+        assert_eq!(decode_reason(&adv).unwrap_err(), "short_service");
+        adv.service.insert(0xfd3d, vec![b'x']);
+        assert_eq!(decode_reason(&adv).unwrap_err(), "unsupported_model");
+        adv.service.insert(0xfd3d, vec![b'5', 0, 100]);
+        assert_eq!(decode_reason(&adv).unwrap_err(), "missing_measurements");
+        adv.service.insert(0xfd3d, vec![b'5', 0, 0, 0, 0, 0]);
+        assert_eq!(decode_reason(&adv).unwrap_err(), "zero_placeholder");
+    }
     #[test]
     fn co2_fixture_and_truncation() {
         let mut a = Advertisement::default();

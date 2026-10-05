@@ -90,6 +90,8 @@ ssh nanopi-r5s-b 'tail -40 /tmp/home-sensors/service.log'
 
 両センサーの `events` と `observed_at` が増えることを確認します。`collector.state=scanning` だけでは受信の証拠になりません。`cloud.pending` は送信待ち件数、`dropped` は24時間の期限切れ件数です。
 
+BLE診断は登録済みセンサーごとに5分に1行、同じサービスログへ `INFO BLE` として出力します（生パケット・未登録機器は出力しません）。`received` はその期間の広告レポート数、`accepted` は採用数、`skipped` は読み飛ばした理由別の件数、`missing_co2` はCO₂機器でCO₂値のない採用数です。`raw_age_seconds` と `valid_age_seconds` で、電波自体が途絶えたのか、受信しても採用できないのかを区別できます。`None` は未受信、`rssi` は最後の広告の電波強度です。集約時に3分以上更新がなければ `state=stale`、前回の集約で停止し今回は受信できていれば `state=recovered` になります。短い停止・復帰は集約の間に収まると状態表示には残りません。
+
 ログは `/tmp/home-sensors/` で512 KiB×2世代にローテーションします。GUI追加設定は `/etc/home-sensors/sensors.json` に原子的に保存し、計測記録はRAMに保持します。起動はOpenWrtのprocd（`/etc/init.d/home-sensors`）で行い、BLEアダプタ（hci0）はアプリが直接初期化するためBlueZは不要です。
 
 ## HTTP API
