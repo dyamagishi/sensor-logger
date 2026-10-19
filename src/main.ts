@@ -1,5 +1,6 @@
 import './style.css';
 import uPlot from 'uplot';
+import { metricRange, timeAxis, valueAxis } from './plot-axes';
 import 'uplot/dist/uPlot.min.css';
 import { setupRegistration } from './registration';
 import { setupHue, type HueStatus } from './hue';
@@ -53,7 +54,7 @@ function spark(history:History|undefined, metric:Metric, days=1) {
   const rows=history?.samples ?? [];
   const vals=rows.map(r=>r[metric]).filter((n):n is number=>n!=null);
   if(!vals.length) return '<div class="spark-empty">記録を集めています</div>';
-  const min=Math.min(...vals), max=Math.max(...vals), range=Math.max(max-min,metric==='co2'?100:metric==='temperature'?1:5);
+  const [min,max]=metricRange(metric,Math.min(...vals),Math.max(...vals)), range=max-min;
   const from=history!.from, to=history!.to;
   let d='', previous:number|undefined;
   for(const row of rows) {
@@ -65,7 +66,14 @@ function spark(history:History|undefined, metric:Metric, days=1) {
   }
   const points=rows.filter(r=>r[metric]!=null);
   const last=points[points.length-1];
-  const svg=`<svg class="spark" viewBox="0 0 400 66" preserveAspectRatio="none" aria-label="直近${days===1?'24時間':`${days}日間`}の${labels[metric]}推移"><path class="baseline" d="M4 60H396"/><path d="${d}" style="stroke:${colors[metric]}"/><circle cx="${4+(last.minute-from)/(to-from)*392}" cy="${55-(last[metric]!-min)/range*42}" r="2.5" fill="${colors[metric]}"/></svg>`;
+  // Vertical guides at each JST midnight so the date change is readable.
+  const jst=9*3600;
+  let dayLines='';
+  for(let boundary=(Math.floor((from+jst)/86400)+1)*86400-jst;boundary<to;boundary+=86400) {
+    const x=4+(boundary-from)/(to-from)*392;
+    dayLines+=`<line class="day-line" x1="${x.toFixed(2)}" y1="10" x2="${x.toFixed(2)}" y2="60"/>`;
+  }
+  const svg=`<svg class="spark" viewBox="0 0 400 66" preserveAspectRatio="none" aria-label="直近${days===1?'24時間':`${days}日間`}の${labels[metric]}推移"><path class="baseline" d="M4 60H396"/>${dayLines}<path d="${d}" style="stroke:${colors[metric]}"/><circle cx="${4+(last.minute-from)/(to-from)*392}" cy="${55-(last[metric]!-min)/range*42}" r="2.5" fill="${colors[metric]}"/></svg>`;
   const entries=sparkCache.get(history!)??new Map<string,string>();
   entries.set(key,svg);sparkCache.set(history!,entries);
   return svg;
@@ -218,7 +226,7 @@ async function drawDetail() {
     const section=document.createElement('section');section.className='detail-chart';
     const heading=document.createElement('h3');heading.textContent=labels[activeMetric]+' / '+units[activeMetric];heading.style.color=colors[activeMetric];section.appendChild(heading);
     const el=document.createElement('div');section.appendChild(el);root.appendChild(section);
-    plots.push(new uPlot({width:el.clientWidth,height:detailMetrics.size>1?200:Math.min(340,innerHeight*0.43),tzDate:ts=>uPlot.tzDate(new Date(ts*1000),'Asia/Tokyo'),cursor:{drag:{x:true,y:false}},legend:{show:true},series:[{label:'日時',value:'{YYYY}/{M}/{D} {HH}:{mm}'},{label:labels[activeMetric],stroke:colors[activeMetric],width:2,spanGaps:false,points:{show:xs.length<10},value:(_u,n)=>n==null?'—':`${value(n,activeMetric==='temperature'?1:0)} ${units[activeMetric]}`}],axes:[{values:(_u,ticks)=>ticks.map(ts=>(activeDays===1?new Date(ts*1000).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'})+'\n':'')+new Date(ts*1000).toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric'})),stroke:'#93a5ad',grid:{stroke:'#26363f'},font:'12px sans-serif'},{stroke:'#93a5ad',grid:{stroke:'#26363f'},size:60,font:'12px sans-serif'}],scales:{x:{time:true,range:()=>[hist.from,hist.to]},y:{auto:true}}},[xs,ys],el));
+    plots.push(new uPlot({width:el.clientWidth,height:detailMetrics.size>1?200:Math.min(340,innerHeight*0.43),tzDate:ts=>uPlot.tzDate(new Date(ts*1000),'Asia/Tokyo'),cursor:{drag:{x:true,y:false}},legend:{show:true},series:[{label:'日時',value:'{YYYY}/{M}/{D} {HH}:{mm}'},{label:labels[activeMetric],stroke:colors[activeMetric],width:2,spanGaps:false,points:{show:xs.length<10},value:(_u,n)=>n==null?'—':`${value(n,activeMetric==='temperature'?1:0)} ${units[activeMetric]}`}],axes:[timeAxis(),valueAxis(units[activeMetric])],scales:{x:{time:true,auto:false},y:{range:(_u,min,max)=>metricRange(activeMetric,min,max)}},hooks:{ready:[u=>u.setScale('x',{min:hist.from,max:hist.to})]}},[xs,ys],el));
     }
     if(!detailMetrics.size){msg.textContent='表示するグラフをチェックしてください。';return;}
     const messages=[activeDays===365?'1時間集計（長期保存）を表示しています。':'1分ごとの記録を間引かず表示しています。',hist.samples.length?'欠測区間は線をつないでいません。':'この期間の記録はまだありません。'];

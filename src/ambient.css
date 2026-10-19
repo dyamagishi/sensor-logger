@@ -71,6 +71,7 @@ body { background: var(--ambient-bg); color: var(--ambient-text); }
 .ambient-reading-graph .spark { width: 100%; height: 100%; display: block; margin: 0; }
 .ambient-reading-graph .spark path { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
 .ambient-reading-graph .spark .baseline { stroke: #ffffff0c; stroke-width: 1; }
+.ambient-reading-graph .spark .day-line { stroke: #ffffff2b; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .ambient-reading-graph .spark-empty { height: 100%; min-height: 0; display: grid; place-items: center; font-size: 10px; color: var(--ambient-muted); }
 .ambient-reading strong { color: inherit; font-size: clamp(48px, 7vw, 96px); font-weight: 300; letter-spacing: -.055em; font-variant-numeric: tabular-nums; line-height: 1.12; }
 .ambient-unit { font-size: 22px; opacity: .75; }
@@ -109,6 +110,7 @@ body { background: var(--ambient-bg); color: var(--ambient-text); }
 .ambient-graph .spark { flex: 1; width: 100%; min-height: 20px; height: 70px; margin-top: 10px; overflow: visible; }
 .ambient-graph .spark path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .ambient-graph .spark .baseline { stroke: #ffffff0c; stroke-width: 1; }
+.ambient-graph .spark .day-line { stroke: #ffffff2b; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .ambient-graph .spark-empty { min-height: 0; flex: 1; display: grid; place-items: center; font-size: 11px; color: var(--ambient-muted); }
 .ambient-empty { display: grid; place-items: center; color: var(--ambient-muted); font-size: 14px; grid-column: 1 / -1; }
 #management { width: min(980px, 94vw); }
